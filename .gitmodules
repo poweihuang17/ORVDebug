@@ -1,0 +1,4 @@
+[submodule "vscale"]
+	path = vscale
+	url = https://github.com/poweihuang17/vscale
+	branch = ORVDebug
