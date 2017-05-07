@@ -1,4 +1,7 @@
+//Width related constant
 `define ADDRESS_SIZE 8
+`define REG_ADDR_WIDTH  5
+`define XPR_LEN        32
 
 //For state machine in figure 3.1 of debug spec v0.13
 `define DM_STATE_WIDTH 4
@@ -6,8 +9,9 @@
 `define DM_HALTING 1
 `define DM_RESUMING 2
 `define DM_HALTED 3
-`define DM_COMMAND_EXECUTING 4
-`define DM_COMMAND_DONE 5
+`define DM_ACCESS_EXECUTING_1 4
+`define DM_ACCESS_EXECUTING_2 5
+`define DM_ACCESS_COMMAND_DONE 6
 
 //Still have problems about error handling
 `define DM_ERROR_DETECTED 6

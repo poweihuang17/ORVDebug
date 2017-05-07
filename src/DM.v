@@ -13,14 +13,20 @@ module DM(
   input write_en;
   input read_en;
   output [31:0] rdata;
+  output dm_busy;
 
   //Core interface
-  //For halt control
+    //For halt control
   output haltreq;
+  input core_haltack;
   output resumereq;
 
-  //For abstract command;
+    //For abstract command;
   output [12:0] register_index;
+  output debug_write;
+  output debug_read;
+  output [`XPR_LEN-1:0]      debug_wdata,
+  input [`XPR_LEN-1:0]       debug_rdata
 
 );
 
@@ -106,6 +112,7 @@ always@(*)
 //State machine of Figure 3.1
   reg [`DM_STATE_WIDTH-1] dm_state;
   wire [`DM_STATE_WIDTH-1] dm_state_next;
+  reg command_written;
 
 always@(posedge reset or posedge clk)
   begin
@@ -113,14 +120,67 @@ always@(posedge reset or posedge clk)
     dm_state<=`DM_STATE_WIDTH'd0;
   else
     dm_state<=dm_state_next;
+  end
 
 always@(*)
   begin
-  
+  //default value
+  dmstatus_next=dmstatus;
+  haltreq=1'b0;
+  resumereq=1'b0;
+
+  debug_write=1'b0;
+  debug_read=1'b0;
+  register_index=12'd0;
+  debug_wdata=`XPR_LEN'd0;
+
   case(dm_state)
     `DM_MUSH_MODE:
       begin
+      if(dmcontrol[31])
+        begin
+        dm_state_next=`DM_HALTING;
+        dmstatus_next[10]=1'b0; //anyrunning
+        dmstatus_next[11]=1'b0; //allrunning
+        end
       end
+
+    `DM_HALTING:
+      begin
+      haltreq=1'b1;
+      if(core_haltack)
+        begin
+        dm_state_next=`DM_HALTED;
+        dmstatus_next[9]=1'b1;
+        dmstatus_next[8]=1'b1;
+        end
+      end
+
+    `DM_HALTED:
+      begin
+      if(command_written==1'b1 && command[31:24]==8'd1)
+        begin
+        dm_state_next=`DM_ACCESS_COMMAND_EXECUTING_1;
+        end
+      end
+
+    `DM_ACCESS_COMMAND_EXECUTING_1:
+      begin
+      if(command[16]==1'b0 && command[17]==1'b1)
+        begin
+        debug_read=1'b1;
+        register_index=command[11:0];
+        end
+      else if(command[16]==1'b1 && command[17]==1'b1)
+        begin
+        debug_write=1'b1;
+        register_index=command[11:0];
+        end
+      else
+        dm_state_next=`DM_ACCESS_COMMAND_DONE;
+      end
+
+  endcase
 
   end
 endmodule
