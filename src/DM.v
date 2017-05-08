@@ -26,13 +26,15 @@ module DM(
   output debug_write;
   output debug_read;
   output [`XPR_LEN-1:0]      debug_wdata,
-  input [`XPR_LEN-1:0]       debug_rdata
+  input [`XPR_LEN-1:0]       debug_rdata,
+  input reg_rack;
+  input reg_wack;
 
 );
 
 //DM register declaration
 reg [31:0] abstract_data_0;
-reg [31:0] abstract_data_1;
+//reg [31:0] abstract_data_1;
 reg [31:0] dmcontrol;
 reg [31:0] dmstatus;
 reg [31:0] hart_info;
@@ -125,14 +127,22 @@ always@(posedge reset or posedge clk)
 always@(*)
   begin
   //default value
+  //DM status and config
   dmstatus_next=dmstatus;
+
+  //Halt control
   haltreq=1'b0;
   resumereq=1'b0;
 
+  //Core
   debug_write=1'b0;
   debug_read=1'b0;
   register_index=12'd0;
   debug_wdata=`XPR_LEN'd0;
+  abstract_data_0_next=abstract_data_0;
+
+  //DMI
+  dm_busy=1'b0;
 
   case(dm_state)
     `DM_MUSH_MODE:
@@ -160,25 +170,83 @@ always@(*)
       begin
       if(command_written==1'b1 && command[31:24]==8'd1)
         begin
+        dm_state_next=`DM_COMMAND_CHECKED;
+        abstractcs_next[12]=1'b1;   //busy
+        end
+      end
+
+    `DM_COMMAND_CHECKED:
+      begin
+      dm_busy=1'b1;
+      
+      //How to detect that a command is written while the DM is busy?
+      if(write_en==1'b1)
+        begin
+        dm_state_next=`DM_ERROR_DETECTED;
+        abstractcs_next[10:8]=3'd1; //cmderror
+        end
+      else if(command[31:24]!=8'd1)
+        begin
+        dm_state_next=`DM_ERROR_DETECTED;
+        abstractcs_next[10:8]=3'd2; //cmderror
+        end
+      //Size error considered exception now.
+      //How about CSR not existed?
+      else if(command[22:20]!=3'd2)
+        begin
+        dm_state_next=`DM_ERROR_DETECTED;
+        abstractcs_next[10:8]=3'd3; //cmderror
+        end
+      else if(dmstatus[9]==1'b0)
+        begin
+        dm_state_next=`DM_ERROR_DETECTED;
+        abstractcs_next[10:8]=3'd4; //cmderror
+        end
+      //Skip cmderror=7 now for this implementation
+      else
+        begin
         dm_state_next=`DM_ACCESS_COMMAND_EXECUTING_1;
+        abstractcs_next[10:8]=3'd0; //cmderror
         end
       end
 
     `DM_ACCESS_COMMAND_EXECUTING_1:
       begin
+
+      dm_busy=1'b1;
       if(command[16]==1'b0 && command[17]==1'b1)
         begin
         debug_read=1'b1;
         register_index=command[11:0];
+        if(reg_rack==1'b1)
+          begin
+          dm_state_next=`DM_HALTED;
+          abstract_data_0_next=debug_rdata;
+          end
+        else
+          begin
+          dm_state_next=`DM_ACCESS_COMMAND_EXECUTING_1;
+          end
         end
       else if(command[16]==1'b1 && command[17]==1'b1)
         begin
         debug_write=1'b1;
         register_index=command[11:0];
+        debug_wdata=abstract_data_0;
+
+        if(reg_wack==1'b1)
+          begin
+          dm_state_next=`DM_HALTED;
+          end
+        else
+          begin
+          dm_state_next=`DM_ACCESS_COMMAND_EXECUTING_1;
+          end
         end
       else
-        dm_state_next=`DM_ACCESS_COMMAND_DONE;
+        dm_state_next=`DM_HALTED;
       end
+
 
   endcase
 

@@ -9,8 +9,8 @@
 `define DM_HALTING 1
 `define DM_RESUMING 2
 `define DM_HALTED 3
-`define DM_ACCESS_EXECUTING_1 4
-`define DM_ACCESS_EXECUTING_2 5
+`define DM_COMMAND_CHECKED 4
+`define DM_ACCESS_EXECUTING_1 5
 `define DM_ACCESS_COMMAND_DONE 6
 
 //Still have problems about error handling
